@@ -1,28 +1,28 @@
-"""Interactive force-directed graph of the RAG context tree."""
+"""Interactive treemap of the RAG context tree using Plotly.
+
+Hierarchy: Root → Theme/Macro → Ticker
+Colored by freshness (green/yellow/red).
+Click a sector to drill in, click to select a node for the detail panel.
+"""
 
 from datetime import datetime, timezone
 from typing import Optional
 
+import plotly.graph_objects as go
 import streamlit as st
-from streamlit_agraph import Config, Edge, Node, agraph
 
 
-# -- colour constants --------------------------------------------------------
-
-COLOR_THEME = "#3b82f6"   # blue
-COLOR_MACRO = "#f59e0b"   # amber
-COLOR_FRESH = "#22c55e"   # green  (updated <= 24h ago)
-COLOR_WARM = "#eab308"    # yellow (2-7d)
-COLOR_STALE = "#ef4444"   # red    (7d+)
-COLOR_DEFAULT = "#6b7280" # grey   (no timestamp)
-COLOR_EDGE = "#4b5563"
-COLOR_CROSS = "#6366f1"   # indigo for cross-links
+COLOR_FRESH = "#22c55e"
+COLOR_WARM = "#eab308"
+COLOR_STALE = "#ef4444"
+COLOR_STATIC = "#6b7280"
+COLOR_THEME = "#3b82f6"
+COLOR_MACRO = "#f59e0b"
 
 
-def _ticker_color(updated_at: Optional[str]) -> str:
-    """Return a hex colour based on how fresh the symbol data is."""
+def _freshness_color(updated_at: Optional[str]) -> str:
     if not updated_at:
-        return COLOR_DEFAULT
+        return COLOR_STATIC
     try:
         ts = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
         age = datetime.now(timezone.utc) - ts
@@ -32,29 +32,22 @@ def _ticker_color(updated_at: Optional[str]) -> str:
             return COLOR_WARM
         return COLOR_STALE
     except (ValueError, TypeError):
-        return COLOR_DEFAULT
+        return COLOR_STATIC
 
 
-def _freshness_bucket(updated_at: Optional[str]) -> str:
+def _freshness_label(updated_at: Optional[str]) -> str:
     if not updated_at:
-        return "stale"
+        return "static"
     try:
         ts = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
         age = datetime.now(timezone.utc) - ts
         if age.days <= 1:
             return "fresh"
         if age.days <= 7:
-            return "warm"
+            return "aging"
         return "stale"
     except (ValueError, TypeError):
-        return "stale"
-
-
-def _node_size(keywords: list) -> int:
-    """Scale node size by keyword count (clamped 15-50)."""
-    base = 15
-    extra = min(len(keywords) * 0.5, 35)
-    return int(base + extra)
+        return "static"
 
 
 def render_tree_graph(
@@ -62,22 +55,8 @@ def render_tree_graph(
     filter_mode: str = "all",
     search_query: str = "",
 ) -> Optional[str]:
-    """Build and render an agraph from the tree dict.
+    """Render a Plotly treemap and return the selected node ID."""
 
-    Parameters
-    ----------
-    tree : dict
-        The full tree snapshot (symbols, themes, macros, relations).
-    filter_mode : str
-        One of "all", "themes", "macros", "stale".
-    search_query : str
-        Case-insensitive substring to highlight/filter nodes.
-
-    Returns
-    -------
-    str or None
-        The node ID selected by the user, or None.
-    """
     symbols = tree.get("symbols", {})
     themes = tree.get("themes", {})
     macros = tree.get("macros", {})
@@ -85,147 +64,169 @@ def render_tree_graph(
     sym_to_themes = relations.get("symbol_to_themes", {})
     sym_to_macros = relations.get("symbol_to_macros", {})
 
-    nodes: list[Node] = []
-    edges: list[Edge] = []
     search_lower = search_query.lower().strip()
 
-    # Track which nodes pass the filter so we can prune edges
-    visible_ids: set[str] = set()
+    # Build parent mapping: ticker -> first theme or macro it belongs to
+    ticker_parent: dict[str, str] = {}
+    for sym in symbols:
+        linked_themes = sym_to_themes.get(sym, [])
+        linked_macros = sym_to_macros.get(sym, [])
+        if linked_themes:
+            ticker_parent[sym] = f"theme_{linked_themes[0]}"
+        elif linked_macros:
+            ticker_parent[sym] = f"macro_{linked_macros[0]}"
+        else:
+            ticker_parent[sym] = "Unlinked"
 
-    # -- Theme nodes ---------------------------------------------------------
-    if filter_mode in ("all", "themes"):
-        for tid, tdata in themes.items():
-            label = tid.replace("_", " ").title()
-            if search_lower and search_lower not in label.lower() and search_lower not in tid.lower():
-                continue
-            nid = f"theme_{tid}"
-            kw = tdata.get("keywords", [])
-            nodes.append(Node(
-                id=nid,
-                label=label,
-                size=_node_size(kw),
-                color=COLOR_THEME,
-                shape="diamond",
-            ))
-            visible_ids.add(nid)
+    # Build treemap data
+    ids = []
+    labels = []
+    parents = []
+    colors = []
+    values = []
+    hover_texts = []
+    custom_ids = []  # our node IDs for selection
 
-    # -- Macro nodes ---------------------------------------------------------
-    if filter_mode in ("all", "macros"):
-        for mid, mdata in macros.items():
-            label = mid.replace("_", " ").title()
-            if search_lower and search_lower not in label.lower() and search_lower not in mid.lower():
-                continue
-            nid = f"macro_{mid}"
-            kw = mdata.get("keywords", [])
-            nodes.append(Node(
-                id=nid,
-                label=label,
-                size=_node_size(kw),
-                color=COLOR_MACRO,
-                shape="diamond",
-            ))
-            visible_ids.add(nid)
+    # Root
+    ids.append("RAG Tree")
+    labels.append("RAG Context Tree")
+    parents.append("")
+    colors.append("#1a1a2e")
+    values.append(0)
+    hover_texts.append("")
+    custom_ids.append("")
 
-    # -- Symbol (ticker) nodes -----------------------------------------------
-    for sym, sdata in symbols.items():
-        updated_at = sdata.get("updated_at")
-        freshness = _freshness_bucket(updated_at)
-
-        if filter_mode == "stale" and freshness != "stale":
+    # Theme branches
+    visible_branches = set()
+    for tid, tdata in themes.items():
+        if filter_mode == "macros":
             continue
-        if filter_mode == "themes" or filter_mode == "macros":
-            # Only include symbols linked to visible themes/macros
-            linked_themes = sym_to_themes.get(sym, [])
-            linked_macros = sym_to_macros.get(sym, [])
-            has_link = False
-            if filter_mode == "themes":
-                has_link = any(f"theme_{t}" in visible_ids for t in linked_themes)
-            else:
-                has_link = any(f"macro_{m}" in visible_ids for m in linked_macros)
-            if not has_link and not search_lower:
+        branch_id = f"theme_{tid}"
+        label = tid.replace("_", " ").title()
+        if search_lower and search_lower not in label.lower() and search_lower not in tid.lower():
+            # Still include if any child ticker matches
+            child_tickers = [s for s, p in ticker_parent.items() if p == branch_id]
+            if not any(search_lower in s.lower() for s in child_tickers):
                 continue
 
+        ids.append(branch_id)
+        labels.append(f"🔷 {label}")
+        parents.append("RAG Tree")
+        colors.append(COLOR_THEME)
+        values.append(0)
+        kw_count = len(tdata.get("keywords", []))
+        hover_texts.append(f"Theme: {tid}<br>Keywords: {kw_count}<br>{tdata.get('description', '')[:120]}")
+        custom_ids.append(branch_id)
+        visible_branches.add(branch_id)
+
+    # Macro branches
+    for mid, mdata in macros.items():
+        if filter_mode == "themes":
+            continue
+        branch_id = f"macro_{mid}"
+        label = mid.replace("_", " ").title()
+        if search_lower and search_lower not in label.lower() and search_lower not in mid.lower():
+            child_tickers = [s for s, p in ticker_parent.items() if p == branch_id]
+            if not any(search_lower in s.lower() for s in child_tickers):
+                continue
+
+        ids.append(branch_id)
+        labels.append(f"🔶 {label}")
+        parents.append("RAG Tree")
+        colors.append(COLOR_MACRO)
+        values.append(0)
+        kw_count = len(mdata.get("keywords", []))
+        hover_texts.append(f"Macro: {mid}<br>Keywords: {kw_count}<br>{mdata.get('description', '')[:120]}")
+        custom_ids.append(branch_id)
+        visible_branches.add(branch_id)
+
+    # Unlinked bucket (if needed)
+    has_unlinked = any(p == "Unlinked" for p in ticker_parent.values())
+    if has_unlinked and filter_mode == "all":
+        ids.append("Unlinked")
+        labels.append("Unlinked")
+        parents.append("RAG Tree")
+        colors.append("#374151")
+        values.append(0)
+        hover_texts.append("Tickers not linked to any theme or macro")
+        custom_ids.append("")
+        visible_branches.add("Unlinked")
+
+    # Ticker leaves
+    for sym, sdata in symbols.items():
+        parent = ticker_parent.get(sym, "Unlinked")
+        if parent not in visible_branches:
+            continue
+
+        updated_at = sdata.get("updated_at")
+        freshness = _freshness_label(updated_at)
+
+        if filter_mode == "stale" and freshness not in ("stale", "static"):
+            continue
         if search_lower and search_lower not in sym.lower():
-            # Also check keywords
             kw_match = any(search_lower in k.lower() for k in sdata.get("keywords", []))
             if not kw_match:
                 continue
 
-        nid = f"sym_{sym}"
-        kw = sdata.get("keywords", [])
-        nodes.append(Node(
-            id=nid,
-            label=sym,
-            size=_node_size(kw),
-            color=_ticker_color(updated_at),
-            shape="dot",
-        ))
-        visible_ids.add(nid)
+        display_name = sym.replace("on", "").replace("0", "")
+        kw_count = len(sdata.get("keywords", []))
+        color = _freshness_color(updated_at)
 
-    # -- Edges: theme/macro -> symbol (solid) --------------------------------
-    for sym, theme_list in sym_to_themes.items():
-        sym_nid = f"sym_{sym}"
-        if sym_nid not in visible_ids:
-            continue
-        for tid in theme_list:
-            theme_nid = f"theme_{tid}"
-            if theme_nid in visible_ids:
-                edges.append(Edge(
-                    source=theme_nid,
-                    target=sym_nid,
-                    color=COLOR_EDGE,
-                    width=1,
-                ))
+        ids.append(f"sym_{sym}")
+        labels.append(display_name)
+        parents.append(parent)
+        colors.append(color)
+        values.append(max(kw_count, 1))  # size by keyword count
+        desc = sdata.get("description", "")[:100]
+        source = sdata.get("context_source", "static")
+        hover_texts.append(
+            f"<b>{sym}</b><br>"
+            f"Source: {source} | Freshness: {freshness}<br>"
+            f"Keywords: {kw_count}<br>"
+            f"{desc}"
+        )
+        custom_ids.append(f"sym_{sym}")
 
-    for sym, macro_list in sym_to_macros.items():
-        sym_nid = f"sym_{sym}"
-        if sym_nid not in visible_ids:
-            continue
-        for mid in macro_list:
-            macro_nid = f"macro_{mid}"
-            if macro_nid in visible_ids:
-                edges.append(Edge(
-                    source=macro_nid,
-                    target=sym_nid,
-                    color=COLOR_EDGE,
-                    width=1,
-                ))
-
-    # -- Edges: cross-links between themes/macros (dashed) -------------------
-    # If a symbol links to both a theme and a macro that are visible,
-    # draw a dashed cross-link between them.
-    for sym in symbols:
-        linked_themes = sym_to_themes.get(sym, [])
-        linked_macros = sym_to_macros.get(sym, [])
-        for tid in linked_themes:
-            for mid in linked_macros:
-                t_nid = f"theme_{tid}"
-                m_nid = f"macro_{mid}"
-                if t_nid in visible_ids and m_nid in visible_ids:
-                    edges.append(Edge(
-                        source=t_nid,
-                        target=m_nid,
-                        color=COLOR_CROSS,
-                        width=1,
-                        dashes=True,
-                    ))
-
-    if not nodes:
+    if len(ids) <= 1:
         st.info("No nodes match the current filter / search.")
         return None
 
-    config = Config(
-        width="100%",
-        height=600,
-        directed=False,
-        physics=True,
-        hierarchical=False,
-        nodeHighlightBehavior=True,
-        highlightColor=COLOR_THEME,
-        collapsible=False,
-        node={"labelProperty": "label"},
-        link={"highlightColor": COLOR_CROSS},
+    fig = go.Figure(go.Treemap(
+        ids=ids,
+        labels=labels,
+        parents=parents,
+        values=values,
+        marker=dict(
+            colors=colors,
+            line=dict(width=1, color="#0e1117"),
+        ),
+        hovertext=hover_texts,
+        hoverinfo="text",
+        textinfo="label",
+        textfont=dict(size=12, color="#fafafa"),
+        branchvalues="total",
+        maxdepth=2,
+    ))
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=30, b=0),
+        height=620,
+        paper_bgcolor="#0e1117",
+        plot_bgcolor="#0e1117",
+        font=dict(color="#fafafa"),
     )
 
-    selected = agraph(nodes=nodes, edges=edges, config=config)
-    return selected
+    # Render and capture clicks
+    event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="treemap")
+
+    # Extract selected node from click event
+    if event and event.selection and event.selection.points:
+        point = event.selection.points[0]
+        # point has point_index — map back to our custom_ids
+        idx = point.get("point_index", point.get("pointIndex", -1))
+        if idx is not None and 0 <= idx < len(custom_ids):
+            selected_id = custom_ids[idx]
+            if selected_id:
+                return selected_id
+
+    return None
