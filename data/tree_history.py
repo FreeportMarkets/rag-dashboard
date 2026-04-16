@@ -60,14 +60,26 @@ def _flatten_snapshot(raw: dict) -> dict:
 
 @st.cache_data(ttl=300)
 def list_snapshot_dates() -> list[str]:
-    """Return sorted (desc) list of available YYYY-MM-DD snapshots in freeport-rag-tree."""
+    """Return sorted (desc) list of available YYYY-MM-DD snapshots in freeport-rag-tree.
+
+    Paginates through the partition so we never silently truncate newer
+    dates once the table accumulates >1 MB of SK items.
+    """
     table = _get_dynamodb().Table("freeport-rag-tree")
-    resp = table.query(
-        KeyConditionExpression="PK = :pk",
-        ExpressionAttributeValues={":pk": "TREE"},
-        ProjectionExpression="SK",
-    )
-    dates = [item["SK"] for item in resp.get("Items", []) if _DATE_RE.match(item.get("SK", ""))]
+    dates: list[str] = []
+    kwargs = {
+        "KeyConditionExpression": "PK = :pk",
+        "ExpressionAttributeValues": {":pk": "TREE"},
+        "ProjectionExpression": "SK",
+        "ScanIndexForward": False,  # return newest SKs first
+    }
+    while True:
+        resp = table.query(**kwargs)
+        dates.extend(item["SK"] for item in resp.get("Items", []) if _DATE_RE.match(item.get("SK", "")))
+        last = resp.get("LastEvaluatedKey")
+        if not last:
+            break
+        kwargs["ExclusiveStartKey"] = last
     return sorted(dates, reverse=True)
 
 

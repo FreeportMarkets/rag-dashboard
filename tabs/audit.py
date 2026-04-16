@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
@@ -38,17 +38,29 @@ def _coverage_section(tree: dict) -> None:
     with col_days:
         days = st.slider("Window (days)", 1, 30, 7, key="audit_gap_days")
 
-    # Load all recent tweets in the window to check coverage
-    today = date.today()
+    # Load all recent tweets in the window to check coverage.
+    # Use UTC today() so the window matches find_gaps()'s UTC cutoff.
+    now_utc = datetime.now(timezone.utc)
+    today_utc = now_utc.date()
     all_rows: list[dict] = []
+    failures: list[tuple[str, str]] = []
     for i in range(days):
-        d = today - timedelta(days=i)
+        d = today_utc - timedelta(days=i)
         try:
             all_rows.extend(load_signals_for_date(d.isoformat()))
-        except Exception:
-            continue
+        except Exception as exc:
+            failures.append((d.isoformat(), str(exc)))
 
-    gaps = find_gaps(tree, all_rows, days=days)
+    if failures and len(failures) == days:
+        st.error(f"Could not load signals for any day in window. First failure: {failures[0][1]}")
+        return
+    if failures:
+        st.warning(
+            f"Could not load signals for {len(failures)}/{days} days — gap list may be incomplete. "
+            f"First failure: {failures[0][0]} ({failures[0][1]})"
+        )
+
+    gaps = find_gaps(tree, all_rows, days=days, now=now_utc)
     if not gaps:
         st.success("Every tracked symbol saw a signal in the window.")
         return

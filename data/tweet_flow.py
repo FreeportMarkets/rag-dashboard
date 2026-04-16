@@ -137,9 +137,12 @@ def aggregate_flow(rows: list[dict], top_ticker_n: int = 30, top_handle_n: int =
 # DDB loader (thin I/O wrapper — not unit-tested; smoke-tested against real DDB)
 # ---------------------------------------------------------------------------
 
+import streamlit as st
+
+
+@st.cache_resource
 def _get_table():
     import boto3
-    import streamlit as st
     aws = st.secrets["aws"]
     kwargs = {
         "aws_access_key_id": aws["aws_access_key_id"],
@@ -151,10 +154,12 @@ def _get_table():
     return boto3.resource("dynamodb", **kwargs).Table("freeport-tweets")
 
 
+@st.cache_data(ttl=300)
 def load_signals_for_date(date: str) -> list[dict]:
     """Fetch all flag=Y signals for a given UTC date (YYYY-MM-DD).
 
     Uses the ``flag-timestamp-index`` GSI: PK=flag, SK=timestamp.
+    Cached 5 min per date so Audit tab slider changes don't re-query.
     """
     from boto3.dynamodb.conditions import Key
 

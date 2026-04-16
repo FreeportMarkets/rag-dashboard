@@ -40,7 +40,7 @@ def _render_changed_entities(title: str, changed: list[dict], kind: str) -> None
         return
     with st.expander(f"{title} ({len(changed)})"):
         for entry in changed:
-            entity_id = entry.pop("id")
+            entity_id = entry.get("id", "?")
             st.markdown(f"**{entity_id}** _{kind}_")
             if "description" in entry:
                 st.markdown("*Description*")
@@ -94,12 +94,17 @@ def render():
 
     col_a, col_b = st.columns(2)
     with col_a:
-        new_date = st.selectbox("New snapshot", dates, index=0, key="diff_new")
+        # Only allow picking a "new" date that has something older to diff against.
+        # `dates` is sorted desc, so dates[:-1] excludes the oldest snapshot.
+        new_date = st.selectbox("New snapshot", dates[:-1], index=0, key="diff_new")
     with col_b:
-        # Default: the snapshot right before the selected `new`
         older = [d for d in dates if d < new_date]
-        default_idx = 0 if older else 0
-        old_date = st.selectbox("Compare to", older or dates[1:], index=default_idx, key="diff_old")
+        # `older` is non-empty by construction (new_date is never the oldest)
+        old_date = st.selectbox("Compare to", older, index=0, key="diff_old")
+
+    if old_date >= new_date:
+        st.info("Pick two different snapshots to compare.")
+        return
 
     old_tree = load_snapshot(old_date)
     new_tree = load_snapshot(new_date)

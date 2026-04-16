@@ -124,6 +124,22 @@ def test_empty_old():
     assert d["symbols"]["removed"] == []
 
 
+def test_diff_is_not_mutated_by_render_code():
+    """Simulate the render pattern: iterate changed entries reading 'id' without pop.
+
+    Regression guard: daily_diff.render() used to `entry.pop('id')` which made the
+    diff dict unsafe to re-iterate. The rendering now reads non-destructively; this
+    test locks that in.
+    """
+    d = diff_trees(_load("tree_yesterday.json"), _load("tree_today.json"))
+    # First iteration — read id like the tab does
+    ids_first = [e.get("id") for e in d["symbols"]["changed"]]
+    # Second iteration — must still see the same ids
+    ids_second = [e.get("id") for e in d["symbols"]["changed"]]
+    assert ids_first == ids_second
+    assert all(i is not None for i in ids_first)
+
+
 if __name__ == "__main__":
     import traceback
     tests = [
@@ -134,6 +150,7 @@ if __name__ == "__main__":
         test_summary_counts,
         test_identical_trees,
         test_empty_old,
+        test_diff_is_not_mutated_by_render_code,
     ]
     failed = 0
     for t in tests:

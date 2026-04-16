@@ -53,6 +53,23 @@ def test_extract_on_synthetic_source(tmp_path):
     assert "fast-specific tail" in fast["text"]
 
 
+def test_extract_warns_on_fstring_prompt(tmp_path, capsys):
+    """Regression: f-string / .format() prompts can't be AST-resolved; extractor must warn."""
+    src = tmp_path / "prompts.py"
+    src.write_text(
+        'MODEL = "gpt-5.2"\n'
+        'FANCY_PROMPT = f"You are an agent using {MODEL} — respond with structured JSON output."\n'
+        'PLAIN_PROMPT = "This one is a plain literal prompt that is long enough to be extracted."\n'
+    )
+    entries = extract(src)
+    names = [e["name"] for e in entries]
+    assert "PLAIN_PROMPT" in names
+    assert "FANCY_PROMPT" not in names   # f-string silently dropped from output
+    err = capsys.readouterr().err
+    assert "FANCY_PROMPT" in err         # but a warning is emitted to stderr
+    assert "could not resolve" in err
+
+
 def test_snapshot_has_expected_shape():
     """The committed snapshot must exist and have the documented shape."""
     assert SNAPSHOT.exists(), "prompts_snapshot.json missing — run scripts/extract_prompts.py"
@@ -88,6 +105,19 @@ if __name__ == "__main__":
         with tempfile.TemporaryDirectory() as d:
             test_extract_on_synthetic_source(Path(d))
     tests.append(_run_tmp)
+
+    def _run_fstring_warn():
+        """Mini capsys — capture stderr directly."""
+        import io, contextlib
+        from pathlib import Path as _P
+        with tempfile.TemporaryDirectory() as d:
+            class _Cap:
+                def readouterr(_self):
+                    return types.SimpleNamespace(err=buf.getvalue(), out="")
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                test_extract_warns_on_fstring_prompt(_P(d), _Cap())
+    tests.append(_run_fstring_warn)
 
     failed = 0
     for t in tests:

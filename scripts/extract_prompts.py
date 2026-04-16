@@ -107,6 +107,11 @@ def extract(source: Path) -> list[dict]:
             resolved[node.targets[0].id] = value
 
     # Pass 2: emit public prompts only.
+    # A "prompt-like" name follows the naming convention used in prompts.py:
+    # ends in _PROMPT, _SYSTEM, _DEV, _USER, or _TEMPLATE.
+    prompt_suffixes = ("_PROMPT", "_SYSTEM", "_DEV", "_USER", "_TEMPLATE")
+    skipped_unresolved: list[tuple[str, int]] = []
+
     for node in tree.body:
         if not isinstance(node, ast.Assign) or len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
             continue
@@ -114,7 +119,18 @@ def extract(source: Path) -> list[dict]:
         if name.startswith("_"):
             continue  # private helpers already folded into public prompts
         value = resolved.get(name)
-        if value is None or len(value) < MIN_PROMPT_LEN:
+        if value is None:
+            # Warn only when the name LOOKS like a prompt constant by naming
+            # convention AND the right-hand side isn't plainly something else
+            # (a list/tuple/dict literal). This catches f-strings and .format()
+            # without flagging deliberately-structured data like research-question
+            # lists (SYMBOL_QUESTIONS, THEME_QUESTIONS, etc.).
+            looks_like_prompt = any(name.endswith(s) for s in prompt_suffixes) or name == "SYSTEM_PROMPT"
+            is_structural = isinstance(node.value, (ast.List, ast.Tuple, ast.Dict, ast.Set))
+            if looks_like_prompt and not is_structural:
+                skipped_unresolved.append((name, node.lineno))
+            continue
+        if len(value) < MIN_PROMPT_LEN:
             continue
         out.append({
             "name": name,
@@ -126,6 +142,17 @@ def extract(source: Path) -> list[dict]:
             "char_count": len(value),
             "text": value,
         })
+
+    if skipped_unresolved:
+        import sys
+        print(
+            f"WARNING: extractor could not resolve {len(skipped_unresolved)} top-level name(s) "
+            f"as string constants — they are skipped and will not appear in the dashboard. "
+            f"Consider rewriting as string-literal concatenation.",
+            file=sys.stderr,
+        )
+        for name, lineno in skipped_unresolved:
+            print(f"  - {name} (L{lineno})", file=sys.stderr)
 
     return out
 
