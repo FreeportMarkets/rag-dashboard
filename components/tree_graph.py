@@ -216,7 +216,7 @@ def render_tree_graph(
         font=dict(color="#fafafa"),
     )
 
-    st.plotly_chart(fig, use_container_width=True, key="treemap")
+    st.plotly_chart(fig, key="treemap")
 
     # Node selection via selectbox (more reliable than chart click events)
     all_node_ids = [cid for cid in custom_ids if cid]
