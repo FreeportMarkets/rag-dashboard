@@ -58,29 +58,6 @@ st.markdown(
 )
 
 
-# ── Authentication ─────────────────────────────────────────────────────────────
-def _check_password() -> bool:
-    """Simple password gate using st.secrets['auth']['password']."""
-    if st.session_state.get("authenticated"):
-        return True
-
-    with st.container():
-        st.markdown("### RAG Context Tree")
-        st.caption("Internal dashboard — enter password to continue.")
-        password = st.text_input("Password", type="password", key="password_input")
-        if st.button("Login", key="login_btn"):
-            if password == st.secrets["auth"]["password"]:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("Incorrect password.")
-    return False
-
-
-if not _check_password():
-    st.stop()
-
-
 # ── Main App ───────────────────────────────────────────────────────────────────
 st.markdown("# RAG Context Tree")
 
