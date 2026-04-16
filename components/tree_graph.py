@@ -1,49 +1,34 @@
-"""Interactive treemap of the RAG context tree using Plotly.
+"""Interactive treemap of the RAG context tree using plotly.express.
 
-Hierarchy: Root → Theme/Macro → Ticker
-Colored by freshness (green/yellow/red).
-Click a sector to drill in, click to select a node for the detail panel.
+Hierarchy: Sector (theme/macro) → Ticker
+Colored by freshness. Click a sector to drill in.
+Uses px.treemap (not go.Treemap which has rendering bugs).
 """
 
 from datetime import datetime, timezone
 from typing import Optional
 
-import plotly.graph_objects as go
+import pandas as pd
+import plotly.express as px
 import streamlit as st
 
-
-COLOR_FRESH = "#22c55e"
-COLOR_WARM = "#eab308"
-COLOR_STALE = "#ef4444"
-COLOR_STATIC = "#64748b"  # slate-500, visible on dark bg
-COLOR_THEME = "#3b82f6"
-COLOR_MACRO = "#f59e0b"
-
-
-def _freshness_color(updated_at: Optional[str]) -> str:
-    if not updated_at:
-        return COLOR_STATIC
-    try:
-        ts = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-        age = datetime.now(timezone.utc) - ts
-        if age.days <= 1:
-            return COLOR_FRESH
-        if age.days <= 7:
-            return COLOR_WARM
-        return COLOR_STALE
-    except (ValueError, TypeError):
-        return COLOR_STATIC
+COLOR_MAP = {
+    "fresh": "#22c55e",
+    "aging": "#eab308",
+    "stale": "#ef4444",
+    "static": "#64748b",
+}
 
 
-def _freshness_label(updated_at: Optional[str]) -> str:
+def _freshness(updated_at: Optional[str]) -> str:
     if not updated_at:
         return "static"
     try:
         ts = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-        age = datetime.now(timezone.utc) - ts
-        if age.days <= 1:
+        age = (datetime.now(timezone.utc) - ts).days
+        if age <= 1:
             return "fresh"
-        if age.days <= 7:
+        if age <= 7:
             return "aging"
         return "stale"
     except (ValueError, TypeError):
@@ -55,194 +40,124 @@ def render_tree_graph(
     filter_mode: str = "all",
     search_query: str = "",
 ) -> Optional[str]:
-    """Render a Plotly treemap and return the selected node ID."""
+    """Render a px.treemap and return selected node ID via selectbox."""
 
     symbols = tree.get("symbols", {})
     themes = tree.get("themes", {})
     macros = tree.get("macros", {})
     relations = tree.get("relations", {})
-    sym_to_themes = relations.get("symbol_to_themes", {})
-    sym_to_macros = relations.get("symbol_to_macros", {})
-
+    s2t = relations.get("symbol_to_themes", {})
+    s2m = relations.get("symbol_to_macros", {})
     search_lower = search_query.lower().strip()
 
-    # Build parent mapping: ticker -> first theme or macro it belongs to
-    ticker_parent: dict[str, str] = {}
-    for sym in symbols:
-        linked_themes = sym_to_themes.get(sym, [])
-        linked_macros = sym_to_macros.get(sym, [])
-        if linked_themes:
-            ticker_parent[sym] = f"theme_{linked_themes[0]}"
-        elif linked_macros:
-            ticker_parent[sym] = f"macro_{linked_macros[0]}"
-        else:
-            ticker_parent[sym] = "Unlinked"
+    rows = []
+    now = datetime.now(timezone.utc)
 
-    # Build treemap data
-    ids = []
-    labels = []
-    parents = []
-    colors = []
-    values = []
-    hover_texts = []
-    custom_ids = []  # our node IDs for selection
-
-    # Root
-    ids.append("RAG Tree")
-    labels.append("RAG Context Tree")
-    parents.append("")
-    colors.append("#1a1a2e")
-    values.append(0)
-    hover_texts.append("")
-    custom_ids.append("")
-
-    # Theme branches
-    visible_branches = set()
-    for tid, tdata in themes.items():
-        if filter_mode == "macros":
-            continue
-        branch_id = f"theme_{tid}"
-        label = tid.replace("_", " ").title()
-        if search_lower and search_lower not in label.lower() and search_lower not in tid.lower():
-            # Still include if any child ticker matches
-            child_tickers = [s for s, p in ticker_parent.items() if p == branch_id]
-            if not any(search_lower in s.lower() for s in child_tickers):
-                continue
-
-        ids.append(branch_id)
-        labels.append(f"🔷 {label}")
-        parents.append("RAG Tree")
-        colors.append(COLOR_THEME)
-        values.append(0)
-        kw_count = len(tdata.get("keywords", []))
-        hover_texts.append(f"Theme: {tid}<br>Keywords: {kw_count}<br>{tdata.get('description', '')[:120]}")
-        custom_ids.append(branch_id)
-        visible_branches.add(branch_id)
-
-    # Macro branches
-    for mid, mdata in macros.items():
-        if filter_mode == "themes":
-            continue
-        branch_id = f"macro_{mid}"
-        label = mid.replace("_", " ").title()
-        if search_lower and search_lower not in label.lower() and search_lower not in mid.lower():
-            child_tickers = [s for s, p in ticker_parent.items() if p == branch_id]
-            if not any(search_lower in s.lower() for s in child_tickers):
-                continue
-
-        ids.append(branch_id)
-        labels.append(f"🔶 {label}")
-        parents.append("RAG Tree")
-        colors.append(COLOR_MACRO)
-        values.append(0)
-        kw_count = len(mdata.get("keywords", []))
-        hover_texts.append(f"Macro: {mid}<br>Keywords: {kw_count}<br>{mdata.get('description', '')[:120]}")
-        custom_ids.append(branch_id)
-        visible_branches.add(branch_id)
-
-    # Unlinked bucket (if needed)
-    has_unlinked = any(p == "Unlinked" for p in ticker_parent.values())
-    if has_unlinked and filter_mode == "all":
-        ids.append("Unlinked")
-        labels.append("Unlinked")
-        parents.append("RAG Tree")
-        colors.append("#374151")
-        values.append(0)
-        hover_texts.append("Tickers not linked to any theme or macro")
-        custom_ids.append("")
-        visible_branches.add("Unlinked")
-
-    # Ticker leaves
     for sym, sdata in symbols.items():
-        parent = ticker_parent.get(sym, "Unlinked")
-        if parent not in visible_branches:
+        # Determine parent sector
+        lt = s2t.get(sym, [])
+        lm = s2m.get(sym, [])
+        if lt:
+            parent = lt[0].replace("_", " ").title()
+            parent_type = "theme"
+        elif lm:
+            parent = lm[0].replace("_", " ").title()
+            parent_type = "macro"
+        else:
+            parent = "Unlinked"
+            parent_type = "none"
+
+        # Apply filters
+        if filter_mode == "themes" and parent_type != "theme":
+            continue
+        if filter_mode == "macros" and parent_type != "macro":
             continue
 
-        updated_at = sdata.get("updated_at")
-        freshness = _freshness_label(updated_at)
-
+        freshness = _freshness(sdata.get("updated_at"))
         if filter_mode == "stale" and freshness not in ("stale", "static"):
             continue
-        if search_lower and search_lower not in sym.lower():
-            kw_match = any(search_lower in k.lower() for k in sdata.get("keywords", []))
-            if not kw_match:
+
+        # Apply search
+        if search_lower:
+            searchable = f"{sym} {' '.join(sdata.get('keywords', []))} {parent}".lower()
+            if search_lower not in searchable:
                 continue
 
-        display_name = sym.replace("on", "").replace("0", "")
         kw_count = len(sdata.get("keywords", []))
-        color = _freshness_color(updated_at)
+        display = sym.replace("on", "").replace("0", "")
 
-        ids.append(f"sym_{sym}")
-        labels.append(display_name)
-        parents.append(parent)
-        colors.append(color)
-        values.append(max(kw_count, 1))  # size by keyword count
-        desc = sdata.get("description", "")[:100]
-        source = sdata.get("context_source", "static")
-        hover_texts.append(
-            f"<b>{sym}</b><br>"
-            f"Source: {source} | Freshness: {freshness}<br>"
-            f"Keywords: {kw_count}<br>"
-            f"{desc}"
-        )
-        custom_ids.append(f"sym_{sym}")
+        rows.append({
+            "sector": parent,
+            "ticker": display,
+            "keywords": max(kw_count, 1),
+            "freshness": freshness,
+            "sym_id": f"sym_{sym}",
+        })
 
-    if len(ids) <= 1:
+    if not rows:
         st.info("No nodes match the current filter / search.")
         return None
 
-    fig = go.Figure(go.Treemap(
-        ids=ids,
-        labels=labels,
-        parents=parents,
-        values=values,
-        marker=dict(
-            colors=colors,
-            line=dict(width=2, color="#1e293b"),
-        ),
-        hovertext=hover_texts,
-        hoverinfo="text",
-        textinfo="label",
-        textfont=dict(size=13, color="#ffffff"),
-        branchvalues="total",
-        maxdepth=2,
-        pathbar=dict(
-            visible=True,
-            textfont=dict(size=12, color="#fafafa"),
-            thickness=28,
-        ),
-        tiling=dict(pad=3),
-    ))
+    df = pd.DataFrame(rows)
 
+    fig = px.treemap(
+        df,
+        path=["sector", "ticker"],
+        values="keywords",
+        color="freshness",
+        color_discrete_map=COLOR_MAP,
+    )
     fig.update_layout(
-        margin=dict(l=4, r=4, t=40, b=4),
-        height=620,
-        paper_bgcolor="#111827",
-        plot_bgcolor="#111827",
-        font=dict(color="#fafafa"),
+        height=650,
+        paper_bgcolor="#0e1117",
+        plot_bgcolor="#0e1117",
+        font=dict(color="#fafafa", size=13),
+        margin=dict(l=4, r=4, t=8, b=4),
+        showlegend=True,
+        legend=dict(
+            title="Freshness",
+            bgcolor="#1a1a2e",
+            font=dict(color="#fafafa"),
+        ),
+    )
+    fig.update_traces(
+        textfont=dict(size=13, color="white"),
+        marker=dict(line=dict(width=1, color="#1e293b")),
     )
 
     st.plotly_chart(fig, key="treemap")
 
-    # Node selection via selectbox (more reliable than chart click events)
-    all_node_ids = [cid for cid in custom_ids if cid]
-    all_node_labels = []
-    for cid in all_node_ids:
-        if cid.startswith("sym_"):
-            all_node_labels.append(f"📊 {cid[4:]}")
-        elif cid.startswith("theme_"):
-            all_node_labels.append(f"🔷 {cid[6:].replace('_', ' ').title()}")
-        elif cid.startswith("macro_"):
-            all_node_labels.append(f"🔶 {cid[6:].replace('_', ' ').title()}")
+    # Node selection via selectbox
+    all_sym_ids = [r["sym_id"] for r in rows]
+    all_labels = [f"{r['ticker']} ({r['sector']})" for r in rows]
 
-    if all_node_labels:
+    # Also add theme/macro branch nodes
+    branch_ids = []
+    branch_labels = []
+    seen_sectors = set()
+    for r in rows:
+        if r["sector"] not in seen_sectors:
+            seen_sectors.add(r["sector"])
+            # Find the original theme/macro id
+            sector_lower = r["sector"].lower().replace(" ", "_")
+            if sector_lower in themes:
+                branch_ids.append(f"theme_{sector_lower}")
+                branch_labels.append(f"🔷 {r['sector']}")
+            elif sector_lower in macros:
+                branch_ids.append(f"macro_{sector_lower}")
+                branch_labels.append(f"🔶 {r['sector']}")
+
+    combined_ids = branch_ids + all_sym_ids
+    combined_labels = branch_labels + [f"📊 {l}" for l in all_labels]
+
+    if combined_labels:
         selected_label = st.selectbox(
             "Select node for details",
-            ["(none)"] + all_node_labels,
+            ["(none)"] + combined_labels,
             key="node_select",
         )
         if selected_label != "(none)":
-            idx = all_node_labels.index(selected_label)
-            return all_node_ids[idx]
+            idx = combined_labels.index(selected_label)
+            return combined_ids[idx]
 
     return None
