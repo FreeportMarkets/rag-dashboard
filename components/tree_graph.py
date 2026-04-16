@@ -216,17 +216,27 @@ def render_tree_graph(
         font=dict(color="#fafafa"),
     )
 
-    # Render and capture clicks
-    event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="treemap")
+    st.plotly_chart(fig, use_container_width=True, key="treemap")
 
-    # Extract selected node from click event
-    if event and event.selection and event.selection.points:
-        point = event.selection.points[0]
-        # point has point_index — map back to our custom_ids
-        idx = point.get("point_index", point.get("pointIndex", -1))
-        if idx is not None and 0 <= idx < len(custom_ids):
-            selected_id = custom_ids[idx]
-            if selected_id:
-                return selected_id
+    # Node selection via selectbox (more reliable than chart click events)
+    all_node_ids = [cid for cid in custom_ids if cid]
+    all_node_labels = []
+    for cid in all_node_ids:
+        if cid.startswith("sym_"):
+            all_node_labels.append(f"📊 {cid[4:]}")
+        elif cid.startswith("theme_"):
+            all_node_labels.append(f"🔷 {cid[6:].replace('_', ' ').title()}")
+        elif cid.startswith("macro_"):
+            all_node_labels.append(f"🔶 {cid[6:].replace('_', ' ').title()}")
+
+    if all_node_labels:
+        selected_label = st.selectbox(
+            "Select node for details",
+            ["(none)"] + all_node_labels,
+            key="node_select",
+        )
+        if selected_label != "(none)":
+            idx = all_node_labels.index(selected_label)
+            return all_node_ids[idx]
 
     return None
