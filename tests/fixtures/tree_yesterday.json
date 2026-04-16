@@ -1,0 +1,56 @@
+{
+  "snapshot_at": "2026-04-15T06:00:00Z",
+  "symbols": {
+    "NVDA": {
+      "description": "Nvidia supplies AI GPUs.",
+      "keywords": ["gpu", "ai", "nvidia"],
+      "upside_catalysts": ["Hyperscaler capex"],
+      "downside_catalysts": [],
+      "context_source": "static",
+      "updated_by": ""
+    },
+    "AMD": {
+      "description": "AMD makes CPUs and AI chips.",
+      "keywords": ["cpu", "chip"],
+      "upside_catalysts": [],
+      "downside_catalysts": [],
+      "context_source": "static",
+      "updated_by": ""
+    },
+    "TCOM": {
+      "description": "Trip.com — China travel.",
+      "keywords": ["china travel"],
+      "upside_catalysts": [],
+      "downside_catalysts": [],
+      "context_source": "static",
+      "updated_by": ""
+    }
+  },
+  "themes": {
+    "ai_infra": {
+      "description": "AI infrastructure buildout.",
+      "keywords": ["ai", "gpu"],
+      "tailwinds": [],
+      "headwinds": []
+    },
+    "china_macro": {
+      "description": "China macro.",
+      "keywords": ["china"],
+      "tailwinds": [],
+      "headwinds": []
+    }
+  },
+  "macros": {
+    "inflation": {
+      "description": "Inflation.",
+      "keywords": ["cpi"],
+      "tailwinds": [],
+      "headwinds": []
+    }
+  },
+  "relations": {
+    "symbol_to_themes": {"NVDA": ["ai_infra"], "TCOM": ["china_macro"]},
+    "symbol_to_macros": {},
+    "theme_to_macros": {}
+  }
+}
