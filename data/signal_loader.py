@@ -12,12 +12,14 @@ import streamlit as st
 def _get_dynamodb():
     """Return a cached boto3 DynamoDB resource using Streamlit secrets."""
     aws = st.secrets["aws"]
-    return boto3.resource(
-        "dynamodb",
-        aws_access_key_id=aws["aws_access_key_id"],
-        aws_secret_access_key=aws["aws_secret_access_key"],
-        region_name=aws.get("region", "us-east-1"),
-    )
+    kwargs = {
+        "aws_access_key_id": aws["aws_access_key_id"],
+        "aws_secret_access_key": aws["aws_secret_access_key"],
+        "region_name": aws.get("region", "us-east-1"),
+    }
+    if aws.get("aws_session_token"):
+        kwargs["aws_session_token"] = aws["aws_session_token"]
+    return boto3.resource("dynamodb", **kwargs)
 
 
 def _decimal_to_float(obj):
