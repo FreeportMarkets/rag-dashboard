@@ -20,11 +20,37 @@ def _get_dynamodb():
 def load_tree() -> dict:
     """Fetch the latest context tree snapshot from freeport-rag-tree.
 
-    Returns the nested data dict (symbols, themes, macros, relations,
-    agent_state, stats).  Cached for 5 minutes.
+    The snapshot stores the live context under a ``tree`` key.  This function
+    flattens it so callers get ``{symbols, themes, macros, relations,
+    agent_state, stats, snapshot_at}`` at the top level.
     """
     dynamodb = _get_dynamodb()
     table = dynamodb.Table("freeport-rag-tree")
     resp = table.get_item(Key={"PK": "TREE", "SK": "latest"})
     item = resp.get("Item", {})
-    return item.get("data", {})
+    raw = item.get("data", {})
+    if not raw:
+        return {}
+
+    # The merger agent writes: {tree: {symbols,themes,macros,relations,...}, agent_state, freshness, static_keyword_count, snapshot_at}
+    # Dashboard expects: {symbols, themes, macros, relations, agent_state, stats, snapshot_at}
+    tree_inner = raw.get("tree", {})
+    freshness = raw.get("freshness", {})
+
+    return {
+        "symbols": tree_inner.get("symbols", {}),
+        "themes": tree_inner.get("themes", {}),
+        "macros": tree_inner.get("macros", {}),
+        "relations": tree_inner.get("relations", {}),
+        "agent_state": raw.get("agent_state", {}),
+        "stats": {
+            "total_symbols": len(tree_inner.get("symbols", {})),
+            "total_keywords": raw.get("static_keyword_count", 0),
+            "total_themes": len(tree_inner.get("themes", {})),
+            "total_macros": len(tree_inner.get("macros", {})),
+            "fresh_count": freshness.get("updated_within_1d", 0),
+            "aging_count": freshness.get("updated_within_7d", 0),
+            "stale_count": freshness.get("older_than_7d", 0),
+        },
+        "snapshot_at": raw.get("snapshot_at", ""),
+    }
