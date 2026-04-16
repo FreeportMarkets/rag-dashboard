@@ -15,7 +15,7 @@ import streamlit as st
 COLOR_FRESH = "#22c55e"
 COLOR_WARM = "#eab308"
 COLOR_STALE = "#ef4444"
-COLOR_STATIC = "#6b7280"
+COLOR_STATIC = "#64748b"  # slate-500, visible on dark bg
 COLOR_THEME = "#3b82f6"
 COLOR_MACRO = "#f59e0b"
 
@@ -198,21 +198,27 @@ def render_tree_graph(
         values=values,
         marker=dict(
             colors=colors,
-            line=dict(width=1, color="#0e1117"),
+            line=dict(width=2, color="#1e293b"),
         ),
         hovertext=hover_texts,
         hoverinfo="text",
         textinfo="label",
-        textfont=dict(size=12, color="#fafafa"),
+        textfont=dict(size=13, color="#ffffff"),
         branchvalues="total",
         maxdepth=2,
+        pathbar=dict(
+            visible=True,
+            textfont=dict(size=12, color="#fafafa"),
+            thickness=28,
+        ),
+        tiling=dict(pad=3),
     ))
 
     fig.update_layout(
-        margin=dict(l=0, r=0, t=30, b=0),
+        margin=dict(l=4, r=4, t=40, b=4),
         height=620,
-        paper_bgcolor="#0e1117",
-        plot_bgcolor="#0e1117",
+        paper_bgcolor="#111827",
+        plot_bgcolor="#111827",
         font=dict(color="#fafafa"),
     )
 
