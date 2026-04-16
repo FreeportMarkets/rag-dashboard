@@ -24,10 +24,19 @@ def _dict_diff_list(old: list, new: list) -> dict:
 
 
 def _scalar_changed(old: Any, new: Any) -> dict | None:
-    """Return {old, new} if they differ, else None."""
-    if (old or "") == (new or ""):
+    """Return {old, new} if they differ, else None.
+
+    Treats None as "absent" (normalized to empty string) so a field that
+    transitions between missing and empty-string is a no-op. Other falsy
+    values (0, False, []) are preserved verbatim — critical if scalar_fields
+    ever includes a numeric or boolean field, since ``old or ""`` would
+    otherwise silently coerce a real ``0`` or ``False`` to ``""``.
+    """
+    a = "" if old is None else old
+    b = "" if new is None else new
+    if a == b:
         return None
-    return {"old": old or "", "new": new or ""}
+    return {"old": a, "new": b}
 
 
 def _diff_entity(

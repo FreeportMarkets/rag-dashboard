@@ -124,6 +124,34 @@ def test_empty_old():
     assert d["symbols"]["removed"] == []
 
 
+def test_scalar_changed_preserves_falsy_values():
+    """Regression: None-vs-'' is a no-op, but 0 / False / [] are preserved verbatim.
+
+    Guards against the ``old or ''`` trap where a real numeric 0 or boolean
+    False would be silently coerced to '' and either masked as 'no change'
+    against None, or rendered incorrectly in the detail panel.
+    """
+    from data.tree_diff import _scalar_changed
+
+    # Semantically equivalent: None ↔ empty string → no change reported
+    assert _scalar_changed(None, "") is None
+    assert _scalar_changed("", None) is None
+    assert _scalar_changed(None, None) is None
+    assert _scalar_changed("", "") is None
+
+    # Real string transition detected, with None normalized to ""
+    assert _scalar_changed(None, "new") == {"old": "", "new": "new"}
+    assert _scalar_changed("old", None) == {"old": "old", "new": ""}
+
+    # Falsy non-None values are NOT coerced
+    assert _scalar_changed(0, 1) == {"old": 0, "new": 1}
+    assert _scalar_changed(0.0, 0.5) == {"old": 0.0, "new": 0.5}
+    assert _scalar_changed(False, True) == {"old": False, "new": True}
+    # Critical: 0 vs None must be detected as a change (was masked before fix)
+    assert _scalar_changed(0, None) == {"old": 0, "new": ""}
+    assert _scalar_changed(None, 0) == {"old": "", "new": 0}
+
+
 def test_diff_is_not_mutated_by_render_code():
     """Simulate the render pattern: iterate changed entries reading 'id' without pop.
 
@@ -150,6 +178,7 @@ if __name__ == "__main__":
         test_summary_counts,
         test_identical_trees,
         test_empty_old,
+        test_scalar_changed_preserves_falsy_values,
         test_diff_is_not_mutated_by_render_code,
     ]
     failed = 0
