@@ -47,7 +47,11 @@ def render():
     col_graph, col_detail = st.columns([7, 3])
 
     with col_graph:
-        selected = render_tree_graph(tree, filter_mode=filter_mode, search_query=search_query)
+        try:
+            selected = render_tree_graph(tree, filter_mode=filter_mode, search_query=search_query)
+        except Exception as e:
+            st.error(f"Tree render error: {e}")
+            selected = None
 
     with col_detail:
         render_node_detail(selected, tree)
