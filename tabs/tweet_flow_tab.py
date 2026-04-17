@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import plotly.express as px
@@ -96,10 +96,13 @@ def render():
         "the Latest feed. (Recommender re-ranks but doesn't exclude rows.)"
     )
 
+    # All DDB queries use UTC ISO boundaries, so the picker must be in UTC too.
+    today_utc = datetime.now(timezone.utc).date()
+
     col_date, _ = st.columns([1, 3])
     with col_date:
-        picked = st.date_input("Date (UTC)", value=date.today(), key="flow_date",
-                               min_value=date.today() - timedelta(days=30), max_value=date.today())
+        picked = st.date_input("Date (UTC)", value=today_utc, key="flow_date",
+                               min_value=today_utc - timedelta(days=30), max_value=today_utc)
 
     try:
         rows = load_signals_for_date(picked.isoformat())
