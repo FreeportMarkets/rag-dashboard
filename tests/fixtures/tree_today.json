@@ -1,0 +1,56 @@
+{
+  "snapshot_at": "2026-04-16T06:00:00Z",
+  "symbols": {
+    "NVDA": {
+      "description": "Nvidia supplies Blackwell/Rubin GPU clusters for AI training.",
+      "keywords": ["gpu", "ai", "nvidia", "blackwell"],
+      "upside_catalysts": ["Hyperscaler capex", "Blackwell ramp"],
+      "downside_catalysts": ["Export controls"],
+      "context_source": "live",
+      "updated_by": "research_agent"
+    },
+    "TCOM": {
+      "description": "Trip.com — China travel.",
+      "keywords": ["china travel"],
+      "upside_catalysts": [],
+      "downside_catalysts": [],
+      "context_source": "static",
+      "updated_by": ""
+    },
+    "TSM": {
+      "description": "TSMC — foundry for AI chips.",
+      "keywords": ["foundry", "tsmc"],
+      "upside_catalysts": [],
+      "downside_catalysts": [],
+      "context_source": "static",
+      "updated_by": ""
+    }
+  },
+  "themes": {
+    "ai_infra": {
+      "description": "AI infrastructure buildout — GPU clusters and power.",
+      "keywords": ["ai", "gpu", "datacenter"],
+      "tailwinds": ["Capex accelerating"],
+      "headwinds": []
+    },
+    "china_macro": {
+      "description": "China macro.",
+      "keywords": ["china"],
+      "tailwinds": [],
+      "headwinds": []
+    }
+  },
+  "macros": {
+    "inflation": {
+      "description": "Inflation.",
+      "keywords": ["cpi"],
+      "tailwinds": [],
+      "headwinds": []
+    }
+  },
+  "relations": {
+    "symbol_to_themes": {"NVDA": ["ai_infra"], "TCOM": ["china_macro"], "TSM": ["ai_infra"]},
+    "symbol_to_macros": {"NVDA": ["inflation"]},
+    "theme_to_macros": {}
+  }
+}
