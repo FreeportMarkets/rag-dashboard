@@ -36,11 +36,12 @@ def _step_footer():
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def _info_box(title: str, body: str):
+def _info_box(title: str, body: str, new: bool = True):
+    prefix = '<span style="color:#60a5fa;font-weight:600;margin-right:4px;">NEW</span>' if new else ""
     st.markdown(
         f"""<div style="background:#0c1829;border:1px solid #1e3a5f;border-left:3px solid #3b82f6;
                        border-radius:6px;padding:8px 12px;margin:6px 0;font-size:0.8rem;">
-            <span style="color:#60a5fa;font-weight:600;">ⓘ {title}</span>
+            {prefix}<span style="color:#60a5fa;font-weight:600;">ⓘ {title}</span>
             <span style="color:#94a3b8;margin-left:6px;">— {body}</span>
         </div>""",
         unsafe_allow_html=True,
@@ -128,16 +129,20 @@ def render_activation_timeline(signal: dict):
             keyword = match.get("keyword_hit", "?")
             source = match.get("source", "static")
             conf = match.get("match_confidence", match.get("score"))
-            badge_bg = "#22c55e" if source == "live" else "#334155"
+            pill_bg = "#052e16" if source == "live" else "#1a2035"
+            pill_color = "#86efac" if source == "live" else "#94a3b8"
+            pill_border = "#166534" if source == "live" else "#2d3748"
             conf_html = (
-                f'<span style="color:#94a3b8;margin-left:6px;">{conf:.2f}</span>'
+                f'<span style="color:#94a3b8;margin-left:8px;">{conf:.2f}</span>'
                 if conf is not None else ""
             )
             st.markdown(
-                f"""<div style="margin:4px 0;">
-                <code>{keyword}</code> &rarr; <strong>{ticker_sym}</strong>{conf_html}
-                <span style="background:{badge_bg};color:#fff;padding:1px 6px;
-                       border-radius:4px;font-size:0.7rem;margin-left:4px;">{source}</span>
+                f"""<div style="margin:6px 0;display:flex;align-items:center;gap:8px;">
+                <span style="background:{pill_bg};color:{pill_color};border:1px solid {pill_border};
+                       padding:2px 10px;border-radius:99px;font-size:0.8rem;font-weight:500;">{keyword}</span>
+                <span style="color:#64748b;">→</span>
+                <strong style="color:#e2e8f0;">{ticker_sym}</strong>
+                {conf_html}
                 </div>""",
                 unsafe_allow_html=True,
             )
@@ -363,44 +368,32 @@ def render_activation_timeline(signal: dict):
             )
 
     if headlines_used:
-        st.markdown("**Headlines**")
         top, rest = headlines_used[:2], headlines_used[2:]
-        for hl in top:
+
+        def _headline_row(hl: dict) -> str:
             source = hl.get("source", "?")
             headline = hl.get("headline", "")
-            age = hl.get("age_minutes", "?")
-            assets = ", ".join(hl.get("matched_assets", []))
             score = hl.get("score", hl.get("relevance"))
+            short = (headline[:22] + "...") if len(headline) > 22 else headline
             score_html = (
-                f'<span style="color:#94a3b8;float:right;">{score:.2f}</span>'
+                f'<span style="color:#94a3b8;margin-left:6px;">{score:.2f}</span>'
                 if score is not None else ""
             )
-            st.markdown(
-                f"""<div style="margin:4px 0;padding:4px 8px;background:#1a1a2e;border-radius:4px;">
-                <small style="color:#64748b">{source} &middot; {age}m ago</small>{score_html}
-                <br>{headline}
-                {f'<br><small style="color:#94a3b8">Assets: {assets}</small>' if assets else ""}
-                </div>""",
-                unsafe_allow_html=True,
+            return (
+                f'<div style="margin:3px 0;font-size:0.85rem;">'
+                f'<span style="color:#64748b;">{source}</span>'
+                f' <span style="color:#475569;">·</span>'
+                f' <span style="color:#cbd5e1;">{short}</span>'
+                f'{score_html}</div>'
             )
+
+        for hl in top:
+            st.markdown(_headline_row(hl), unsafe_allow_html=True)
+
         if rest:
             with st.expander(f"+{len(rest)} more headlines kept"):
                 for hl in rest:
-                    source = hl.get("source", "?")
-                    headline = hl.get("headline", "")
-                    age = hl.get("age_minutes", "?")
-                    score = hl.get("score", hl.get("relevance"))
-                    score_html = (
-                        f'<span style="color:#94a3b8;float:right;">{score:.2f}</span>'
-                        if score is not None else ""
-                    )
-                    st.markdown(
-                        f"""<div style="margin:4px 0;padding:4px 8px;background:#1a1a2e;border-radius:4px;">
-                        <small style="color:#64748b">{source} &middot; {age}m ago</small>{score_html}
-                        <br>{headline}
-                        </div>""",
-                        unsafe_allow_html=True,
-                    )
+                    st.markdown(_headline_row(hl), unsafe_allow_html=True)
 
     if not prices_used and not headlines_used:
         st.caption("No dynamic context recorded.")
@@ -440,6 +433,7 @@ def render_activation_timeline(signal: dict):
                 "Why this matters",
                 f"{name} might have changed the signal but lost to token budget. "
                 "Now you can spot context-window pressure.",
+                new=False,
             )
 
     _step_footer()
