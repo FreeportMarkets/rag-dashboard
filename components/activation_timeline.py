@@ -38,25 +38,13 @@ def _step_footer():
 
 
 def _info_box(title: str, body: str, new: bool = True):
-    prefix = '<span style="color:#60a5fa;font-weight:600;margin-right:4px;">NEW</span>' if new else ""
-    # Single-line HTML — multiline divs with </div> on its own line trigger
-    # the CommonMark blank-line rule and render the closing tag as text.
-    st.markdown(
-        f'<div style="background:#0c1829;border:1px solid #1e3a5f;border-left:3px solid #3b82f6;'
-        f'border-radius:6px;padding:8px 12px;margin:6px 0;font-size:0.8rem;">'
-        f'{prefix}<span style="color:#60a5fa;font-weight:600;">ⓘ {title}</span>'
-        f'<span style="color:#94a3b8;margin-left:6px;">— {body}</span></div>',
-        unsafe_allow_html=True,
-    )
+    # st.info() is a native Streamlit component — immune to markdown/CSS sanitisation.
+    badge = "**NEW** · " if new else ""
+    st.info(f"{badge}**ⓘ {title}** — {body}")
 
 
 def _dropped_box(text: str):
-    st.markdown(
-        f'<div style="background:#120e04;border:1px solid #3d2f0a;border-left:3px solid #f59e0b;'
-        f'border-radius:6px;padding:8px 12px;margin:6px 0;font-size:0.8rem;color:#94a3b8;">'
-        f'{text}</div>',
-        unsafe_allow_html=True,
-    )
+    st.warning(text)
 
 
 def _catalyst_text_score(item):
@@ -131,7 +119,7 @@ def render_activation_timeline(signal: dict):
             ticker_sym = match.get("ticker", "?")
             keyword = match.get("keyword_hit", "?")
             source = match.get("source", "static")
-            conf = match.get("match_confidence", match.get("score"))
+            conf = match.get("match_confidence", match.get("score", 1.0))
             pill_bg = "#052e16" if source == "live" else "#1a2035"
             pill_color = "#86efac" if source == "live" else "#94a3b8"
             pill_border = "#166534" if source == "live" else "#2d3748"
