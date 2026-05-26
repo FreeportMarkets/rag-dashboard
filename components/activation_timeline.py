@@ -519,3 +519,8 @@ def render_activation_timeline(signal: dict):
         unsafe_allow_html=True,
     )
     _step_footer()
+
+    # ── Raw context_match debug ───────────────────────────────────────────────
+    with st.expander("🔍 Raw context_match (debug)"):
+        import json as _json
+        st.code(_json.dumps(ctx, indent=2), language="json")
