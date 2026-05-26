@@ -20,21 +20,17 @@ def _step_header(number: int, title: str, subtitle: str = ""):
         f'<span style="color:#94a3b8;font-size:0.82rem;margin-left:10px;">{subtitle}</span>'
         if subtitle else ""
     )
-    # Use inline-block spans instead of flexbox divs — avoids CommonMark blank-line
-    # splitting and Streamlit stripping display:flex from nested divs.
+    # Padding-based circle: no width/height/display:inline-block needed,
+    # those get stripped by Streamlit's sanitiser. Pure inline spans survive.
     circle = (
-        f'<span style="display:inline-block;width:28px;height:28px;border-radius:50%;'
-        f'background:{colour};text-align:center;line-height:28px;'
-        f'font-weight:700;font-size:0.85rem;color:#0e1117;vertical-align:middle;">{number}</span>'
+        f'<span style="background:{colour};color:#0e1117;border-radius:50%;'
+        f'padding:3px 9px;font-weight:700;font-size:0.88rem;">&thinsp;{number}&thinsp;</span>'
     )
     label = (
-        f'<span style="font-weight:600;font-size:1rem;color:{colour};'
-        f'vertical-align:middle;margin-left:10px;">{title}{sub_html}</span>'
+        f'<span style="color:{colour};font-weight:600;font-size:1rem;margin-left:10px;">'
+        f'{title}{sub_html}</span>'
     )
-    st.markdown(
-        f'<div style="margin-top:20px;margin-bottom:6px;">{circle}{label}</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<p style="margin:20px 0 6px 0;">{circle}{label}</p>', unsafe_allow_html=True)
 
 
 def _step_footer():
@@ -43,22 +39,22 @@ def _step_footer():
 
 def _info_box(title: str, body: str, new: bool = True):
     prefix = '<span style="color:#60a5fa;font-weight:600;margin-right:4px;">NEW</span>' if new else ""
+    # Single-line HTML — multiline divs with </div> on its own line trigger
+    # the CommonMark blank-line rule and render the closing tag as text.
     st.markdown(
-        f"""<div style="background:#0c1829;border:1px solid #1e3a5f;border-left:3px solid #3b82f6;
-                       border-radius:6px;padding:8px 12px;margin:6px 0;font-size:0.8rem;">
-            {prefix}<span style="color:#60a5fa;font-weight:600;">ⓘ {title}</span>
-            <span style="color:#94a3b8;margin-left:6px;">— {body}</span>
-        </div>""",
+        f'<div style="background:#0c1829;border:1px solid #1e3a5f;border-left:3px solid #3b82f6;'
+        f'border-radius:6px;padding:8px 12px;margin:6px 0;font-size:0.8rem;">'
+        f'{prefix}<span style="color:#60a5fa;font-weight:600;">ⓘ {title}</span>'
+        f'<span style="color:#94a3b8;margin-left:6px;">— {body}</span></div>',
         unsafe_allow_html=True,
     )
 
 
 def _dropped_box(text: str):
     st.markdown(
-        f"""<div style="background:#120e04;border:1px solid #3d2f0a;border-left:3px solid #f59e0b;
-                       border-radius:6px;padding:8px 12px;margin:6px 0;font-size:0.8rem;color:#94a3b8;">
-            {text}
-        </div>""",
+        f'<div style="background:#120e04;border:1px solid #3d2f0a;border-left:3px solid #f59e0b;'
+        f'border-radius:6px;padding:8px 12px;margin:6px 0;font-size:0.8rem;color:#94a3b8;">'
+        f'{text}</div>',
         unsafe_allow_html=True,
     )
 
