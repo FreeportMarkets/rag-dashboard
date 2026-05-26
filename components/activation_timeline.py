@@ -20,13 +20,19 @@ def _step_header(number: int, title: str, subtitle: str = ""):
         f'<span style="color:#94a3b8;font-size:0.82rem;margin-left:10px;">{subtitle}</span>'
         if subtitle else ""
     )
+    # Use inline-block spans instead of flexbox divs — avoids CommonMark blank-line
+    # splitting and Streamlit stripping display:flex from nested divs.
+    circle = (
+        f'<span style="display:inline-block;width:28px;height:28px;border-radius:50%;'
+        f'background:{colour};text-align:center;line-height:28px;'
+        f'font-weight:700;font-size:0.85rem;color:#0e1117;vertical-align:middle;">{number}</span>'
+    )
+    label = (
+        f'<span style="font-weight:600;font-size:1rem;color:{colour};'
+        f'vertical-align:middle;margin-left:10px;">{title}{sub_html}</span>'
+    )
     st.markdown(
-        f"""<div style="display:flex;align-items:center;gap:10px;margin-top:20px;margin-bottom:6px;">
-            <div style="width:28px;height:28px;border-radius:50%;background:{colour};
-                        display:flex;align-items:center;justify-content:center;
-                        font-weight:700;font-size:0.85rem;color:#0e1117;flex-shrink:0;">{number}</div>
-            <div style="font-weight:600;font-size:1rem;color:{colour};">{title}{sub_html}</div>
-        </div>""",
+        f'<div style="margin-top:20px;margin-bottom:6px;">{circle}{label}</div>',
         unsafe_allow_html=True,
     )
 
@@ -137,14 +143,16 @@ def render_activation_timeline(signal: dict):
                 f'<span style="color:#94a3b8;margin-left:8px;">{conf:.2f}</span>'
                 if conf is not None else ""
             )
+            # No newlines inside the div — a blank {conf_html} line would be
+            # treated as a CommonMark blank line, ending the HTML block early
+            # and causing </div> to render as visible text.
             st.markdown(
-                f"""<div style="margin:6px 0;display:flex;align-items:center;gap:8px;">
-                <span style="background:{pill_bg};color:{pill_color};border:1px solid {pill_border};
-                       padding:2px 10px;border-radius:99px;font-size:0.8rem;font-weight:500;">{keyword}</span>
-                <span style="color:#64748b;">→</span>
-                <strong style="color:#e2e8f0;">{ticker_sym}</strong>
-                {conf_html}
-                </div>""",
+                '<div style="margin:6px 0;">'
+                f'<span style="background:{pill_bg};color:{pill_color};border:1px solid {pill_border};'
+                f'padding:2px 10px;border-radius:99px;font-size:0.8rem;font-weight:500;">{keyword}</span>'
+                f'<span style="color:#64748b;margin:0 8px;">→</span>'
+                f'<strong style="color:#e2e8f0;">{ticker_sym}</strong>'
+                f'{conf_html}</div>',
                 unsafe_allow_html=True,
             )
         _info_box(
@@ -165,13 +173,10 @@ def render_activation_timeline(signal: dict):
         )
         explanations = [d for d in dropped_keywords[:2] if d.get("explanation")]
         if explanations:
-            ex = " ".join(
-                f"{d['keyword']} {d['explanation']}" for d in explanations
-            )
-            _info_box(
-                "Dropped items",
-                f"what almost matched but didn't, with the reason. {ex}",
-            )
+            ex = " ".join(f"{d['keyword']} {d['explanation']}" for d in explanations)
+            _info_box("Dropped items", f"what almost matched but didn't, with the reason. {ex}")
+    else:
+        _dropped_box("• No keywords were dropped — all matches were accepted.")
 
     _step_footer()
 
@@ -248,6 +253,8 @@ def render_activation_timeline(signal: dict):
             f"• {len(catalysts_dropped)} catalyst{'s' if len(catalysts_dropped) > 1 else ''} "
             f"dropped (score &lt; {threshold:.2f}): {', '.join(preview)}{suffix}"
         )
+    else:
+        _dropped_box("• No catalysts dropped — all retrieved items scored above threshold.")
 
     _step_footer()
 
@@ -344,6 +351,8 @@ def render_activation_timeline(signal: dict):
             else:
                 parts.append(f"{name} rejected")
         _dropped_box(f"• {len(rejected_expansions)} considered: {'; '.join(parts)}")
+    else:
+        _dropped_box("• No candidate expansions were rejected — all co-occurrence checks passed.")
 
     _step_footer()
 
@@ -438,6 +447,8 @@ def render_activation_timeline(signal: dict):
             f"• {len(headlines_dropped)} headline{'s' if len(headlines_dropped) > 1 else ''} "
             f"dropped: {', '.join(items)}"
         )
+    else:
+        _dropped_box("• No headlines dropped — all retrieved items fit within the token budget.")
 
     _step_footer()
 
