@@ -188,7 +188,8 @@ def render_activation_timeline(signal: dict):
                 scored_items.append((text, score))
                 score_html = (
                     f'<span style="color:#94a3b8;margin-left:6px;">{score:.2f}</span>'
-                    if score is not None else ""
+                    if score is not None else
+                    '<span style="color:#475569;margin-left:6px;">—</span>'
                 )
                 st.markdown(
                     f'<div style="margin:2px 0;"><span style="color:#22c55e;">↑</span>'
@@ -200,7 +201,8 @@ def render_activation_timeline(signal: dict):
                 scored_items.append((text, score))
                 score_html = (
                     f'<span style="color:#94a3b8;margin-left:6px;">{score:.2f}</span>'
-                    if score is not None else ""
+                    if score is not None else
+                    '<span style="color:#475569;margin-left:6px;">—</span>'
                 )
                 st.markdown(
                     f'<div style="margin:2px 0;"><span style="color:#ef4444;">↓</span>'
@@ -379,7 +381,8 @@ def render_activation_timeline(signal: dict):
             short = (headline[:22] + "...") if len(headline) > 22 else headline
             score_html = (
                 f'<span style="color:#94a3b8;margin-left:6px;">{score:.2f}</span>'
-                if score is not None else ""
+                if score is not None else
+                '<span style="color:#475569;margin-left:6px;">—</span>'
             )
             return (
                 f'<div style="margin:3px 0;font-size:0.85rem;">'
