@@ -21,19 +21,18 @@ def _step_header(number: int, title: str, subtitle: str = ""):
         if subtitle else ""
     )
     st.markdown(
-        f"""<div style="display:flex;align-items:center;gap:10px;margin-top:16px;">
+        f"""<div style="display:flex;align-items:center;gap:10px;margin-top:20px;margin-bottom:6px;">
             <div style="width:28px;height:28px;border-radius:50%;background:{colour};
                         display:flex;align-items:center;justify-content:center;
                         font-weight:700;font-size:0.85rem;color:#0e1117;flex-shrink:0;">{number}</div>
             <div style="font-weight:600;font-size:1rem;color:{colour};">{title}{sub_html}</div>
-        </div>
-        <div style="border-left:2px solid {colour};margin-left:14px;padding-left:18px;padding-bottom:4px;">""",
+        </div>""",
         unsafe_allow_html=True,
     )
 
 
 def _step_footer():
-    st.markdown("</div>", unsafe_allow_html=True)
+    pass  # Streamlit closes every st.markdown div automatically; no cross-call open divs
 
 
 def _info_box(title: str, body: str, new: bool = True):
@@ -108,11 +107,13 @@ def render_activation_timeline(signal: dict):
     if handle_prior is not None:
         category = signal.get("category", "")
         ctx_str = f" on {category} signals" if category else ""
-        _info_box(
-            "Handle reputation",
+        rep_body = (
             f"why we should trust this source. "
-            f"{handle.lstrip('@')} has {handle_prior:.0%} historical accuracy{ctx_str}.",
+            f"{handle.lstrip('@')} has {handle_prior:.0%} historical accuracy{ctx_str}."
         )
+    else:
+        rep_body = "historical accuracy of this handle on past signals of this type — higher prior means the source is more reliable."
+    _info_box("Handle reputation", rep_body)
 
     _step_footer()
 
@@ -146,11 +147,10 @@ def render_activation_timeline(signal: dict):
                 </div>""",
                 unsafe_allow_html=True,
             )
-        if has_conf:
-            _info_box(
-                "Match confidence",
-                "1.00 = exact match, &lt;1.00 = fuzzy. Lets you spot weak matches.",
-            )
+        _info_box(
+            "Match confidence",
+            "1.00 = exact match, &lt;1.00 = fuzzy. Lets you spot weak matches.",
+        )
     else:
         st.caption("No keyword matches recorded.")
 
@@ -219,16 +219,18 @@ def render_activation_timeline(signal: dict):
                     unsafe_allow_html=True,
                 )
 
-            # Relevance info box when scores are present
+            # Relevance info box — always show, enrich with data when scores exist
             with_scores = [(t, s) for t, s in scored_items if s is not None]
             if len(with_scores) >= 2:
                 top2 = sorted(with_scores, key=lambda x: x[1], reverse=True)[:2]
-                _info_box(
-                    "Relevance scores",
+                rel_body = (
                     f"how strongly each catalyst matched. "
                     f"{top2[0][0]} ({top2[0][1]:.2f}) drove this signal, "
-                    f"not the {top2[1][0]} angle ({top2[1][1]:.2f}).",
+                    f"not the {top2[1][0]} angle ({top2[1][1]:.2f})."
                 )
+            else:
+                rel_body = "how strongly each catalyst matched the tweet — higher score means this catalyst was more relevant to the incoming signal."
+            _info_box("Relevance scores", rel_body)
     else:
         st.caption("No catalysts injected.")
 
@@ -318,6 +320,13 @@ def render_activation_timeline(signal: dict):
     if not any([direct_themes, direct_macros, added_themes, added_macros]):
         st.caption("No theme/macro context.")
 
+    if not shown_rules and any([direct_themes, direct_macros, added_themes, added_macros]):
+        _info_box(
+            "Provenance",
+            "why each theme or macro was included — direct hits matched a keyword directly; "
+            "expanded entries were added because they co-occur with a matched theme in past signals.",
+        )
+
     if rejected_expansions:
         parts = []
         for r in rejected_expansions:
@@ -398,6 +407,13 @@ def render_activation_timeline(signal: dict):
     if not prices_used and not headlines_used:
         st.caption("No dynamic context recorded.")
 
+    _info_box(
+        "Why this matters",
+        "headlines compete for a fixed token budget — lower-ranked or older items get dropped even if relevant. "
+        "This view shows exactly what made the cut and what was left out.",
+        new=False,
+    )
+
     if headlines_dropped:
         items = []
         for d in headlines_dropped[:4]:
@@ -422,19 +438,6 @@ def render_activation_timeline(signal: dict):
             f"• {len(headlines_dropped)} headline{'s' if len(headlines_dropped) > 1 else ''} "
             f"dropped: {', '.join(items)}"
         )
-        token_drops = [
-            d for d in headlines_dropped
-            if isinstance(d, dict) and "token" in d.get("reason", "").lower()
-        ]
-        if token_drops:
-            example = token_drops[0]
-            name = (example.get("source", "") + " " + example.get("headline", "")[:20]).strip()
-            _info_box(
-                "Why this matters",
-                f"{name} might have changed the signal but lost to token budget. "
-                "Now you can spot context-window pressure.",
-                new=False,
-            )
 
     _step_footer()
 
