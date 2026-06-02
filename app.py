@@ -61,13 +61,14 @@ st.markdown(
 # ── Main App ───────────────────────────────────────────────────────────────────
 st.markdown("# RAG Context Tree")
 
-tab_tree, tab_diff, tab_flow, tab_audit, tab_prompts, tab_replay = st.tabs([
+tab_tree, tab_diff, tab_flow, tab_audit, tab_prompts, tab_replay, tab_substack = st.tabs([
     "Context Tree",
     "Daily Diff",
     "Tweet Flow",
     "Audit",
     "Prompts",
     "Activation Replay",
+    "Substack Signals",
 ])
 
 with tab_tree:
@@ -93,3 +94,7 @@ with tab_prompts:
 with tab_replay:
     from tabs.activation_replay import render as render_activation_replay
     render_activation_replay()
+
+with tab_substack:
+    from tabs.substack_signals import render as render_substack_signals
+    render_substack_signals()
